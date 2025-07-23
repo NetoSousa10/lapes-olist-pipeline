@@ -1,0 +1,8 @@
+.env
+.data/
+__pycache__/
+*.pyc
+landing/
+bronze/
+.ipynb_checkpoints/
+models/
