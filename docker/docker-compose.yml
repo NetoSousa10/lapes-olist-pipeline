@@ -1,0 +1,88 @@
+x-airflow-env: &airflow-env
+  AIRFLOW__CORE__EXECUTOR: LocalExecutor
+  AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+  AIRFLOW__CORE__FERNET_KEY: OZ-UJnCd4QLfg_X71vAGvreBt1NcVeFgBtwRiAiwg14=
+  AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+  AIRFLOW_UID: "${AIRFLOW_UID}"
+
+services:
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: admin123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - ../.data/minio:/data
+
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: datalake
+    ports:
+      - "5432:5432"
+    volumes:
+      - ../.data/pg:/var/lib/postgresql/data
+      - ../sql/ddl:/docker-entrypoint-initdb.d
+
+  airflow-db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - ../.data/airflow-db:/var/lib/postgresql/data
+
+  airflow-webserver:
+    image: apache/airflow:2.9.1
+    depends_on: [airflow-db]
+    env_file: ../.env
+    environment:
+      <<: *airflow-env
+    volumes:
+      - ../airflow/dags:/opt/airflow/dags
+      - ../airflow/plugins:/opt/airflow/plugins
+      - ../:/app
+    ports:
+      - "8080:8080"
+    command: webserver
+
+  airflow-scheduler:
+    image: apache/airflow:2.9.1
+    depends_on: [airflow-db]
+    env_file: ../.env
+    environment:
+      <<: *airflow-env
+    volumes:
+      - ../airflow/dags:/opt/airflow/dags
+      - ../airflow/plugins:/opt/airflow/plugins
+      - ../:/app
+    command: scheduler
+
+  airflow-init:
+    image: apache/airflow:2.9.1
+    depends_on: [airflow-db]
+    env_file: ../.env
+    environment:
+      <<: *airflow-env
+    volumes:
+      - ../airflow/dags:/opt/airflow/dags
+      - ../airflow/plugins:/opt/airflow/plugins
+    command: bash -c "airflow db init && airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com"
+    restart: "no"
+
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    depends_on: [minio, postgres]
+    volumes:
+      - ../:/app
+    working_dir: /app
+    command: bash -c "sleep 5 && bash"
