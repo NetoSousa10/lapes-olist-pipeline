@@ -1,3 +1,5 @@
+version: '3.9'
+
 x-airflow-env: &airflow-env
   AIRFLOW__CORE__EXECUTOR: LocalExecutor
   AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
@@ -6,6 +8,7 @@ x-airflow-env: &airflow-env
   AIRFLOW_UID: "${AIRFLOW_UID}"
 
 services:
+  # ------------ Data Lake Infra ------------
   minio:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
@@ -30,6 +33,7 @@ services:
       - ../.data/pg:/var/lib/postgresql/data
       - ../sql/ddl:/docker-entrypoint-initdb.d
 
+  # ------------ Airflow Infra --------------
   airflow-db:
     image: postgres:15
     environment:
@@ -41,7 +45,8 @@ services:
 
   airflow-webserver:
     image: apache/airflow:2.9.1
-    depends_on: [airflow-db]
+    depends_on:
+      - airflow-db
     env_file: ../.env
     environment:
       <<: *airflow-env
@@ -55,7 +60,8 @@ services:
 
   airflow-scheduler:
     image: apache/airflow:2.9.1
-    depends_on: [airflow-db]
+    depends_on:
+      - airflow-db
     env_file: ../.env
     environment:
       <<: *airflow-env
@@ -67,21 +73,37 @@ services:
 
   airflow-init:
     image: apache/airflow:2.9.1
-    depends_on: [airflow-db]
+    depends_on:
+      - airflow-db
     env_file: ../.env
     environment:
       <<: *airflow-env
     volumes:
       - ../airflow/dags:/opt/airflow/dags
       - ../airflow/plugins:/opt/airflow/plugins
-    command: bash -c "airflow db init && airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com"
+    command: >
+      bash -c "airflow db init &&
+               airflow users create \
+                 --username admin \
+                 --password admin \
+                 --firstname Admin \
+                 --lastname User \
+                 --role Admin \
+                 --email admin@example.com"
     restart: "no"
 
+  # ------------ Application Container ------------
   app:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    depends_on: [minio, postgres]
+    env_file: ../.env
+    environment:
+      - KAGGLE_USERNAME
+      - KAGGLE_KEY
+    depends_on:
+      - minio
+      - postgres
     volumes:
       - ../:/app
     working_dir: /app
