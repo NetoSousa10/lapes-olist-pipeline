@@ -19,3 +19,5 @@ ruff==0.4.7
 pytest==8.2.0
 papermill==2.6.0
 nbconvert==7.16.4
+jupyterlab>=4.0.0
+ipykernel>=6.0
